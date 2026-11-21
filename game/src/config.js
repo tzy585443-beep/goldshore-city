@@ -1,61 +1,38 @@
-// Every tuning number and colour in one place. The playfield is a fixed 1280x720 logical area;
-// the renderer scales it to the window, so no rule below depends on the screen size.
+// Goldshore: every tuning number and colour in one place. The world is a fixed 1280x720 logical area.
+export const WORLD = { width: 1280, height: 720, landY: 560, coastY: 600 };
 
-export const FIELD = { width: 1280, height: 720, groundY: 664 };
-
-/** The simulation's fixed step, in seconds: 60 updates a second whatever the display's rate. */
 export const STEP = 1 / 60;
 
-export const PLAYER = {
-  width: 72,
-  height: 24,
-  speed: 560,
-  invulnerable: 1.5,
-};
+export const CAR = { width: 46, height: 24, speed: 210, maxSpeed: 290, accel: 120, brake: 320, turn: 2.3 };
 
-export const LIVES = 3;
+export const PED = { radius: 10, speed: 74 };
+export const COP = { radius: 11, speed: 92, damage: 12, shootRange: 120 };
 
-export const BLOCK = {
-  minWidth: 40,
-  maxWidth: 110,
-  height: 36,
-  speed: 240,
-  speedPerLevel: 30,
-  speedJitter: 90,
-  interval: 0.55,
-  intervalScale: 0.88,
-  minInterval: 0.14,
-  dodgePoints: 1,
-};
+export const WANTED = { max: 5, decayAfter: 16, copDistance: 430 };
 
-export const COIN = {
-  size: 24,
-  speed: 190,
-  speedPerLevel: 14,
-  interval: 1.4,
-  intervalJitter: 0.8,
-  points: 10,
-};
+export const HEALTH = 100;
+export const SHOOT_RANGE = 430;
 
-/** Seconds of play per level, and the last level: speeds and spawn rates stop growing there. */
-export const LEVEL = { seconds: 12, max: 12 };
-
-/** How many falling things can exist at once; the pool is allocated once, at boot. */
-export const POOL_SIZE = 64;
+export const MISSIONS = [
+  { id: 'harbor-run', title: 'Harbor Run', where: 'Old Market', objective: 'Get the package to the Old Market drop.', kind: 'drive', target: { x: 80, y: 300 } },
+  { id: 'market-vigil', title: 'Market Vigil', where: 'Old Market', objective: 'Hold Stall 12 against the harbor crew.', kind: 'defend', waves: 2 },
+  { id: 'hillside', title: 'Hillside', where: 'Hillside', objective: 'Lose the Goldshore PD in the hills.', kind: 'lose' },
+];
 
 export const PALETTE = {
-  backdrop: '#11141b',
-  sky: '#1b1f2a',
-  ground: '#2a3040',
-  player: '#4fc3f7',
-  block: '#e5534b',
-  coin: '#f2c94c',
-  panel: '#252b38',
-  text: '#eef1f5',
-  muted: '#8b93a3',
+  skyTop: '#79c2e4',
+  skyBottom: '#e8f7fd',
+  sun: '#fff3c4',
+  water: '#2f6f8f',
+  waterDeep: '#1d4e6b',
+  sand: '#eedcae',
+  sandDeep: '#e0c68c',
+  road: '#71798a',
+  roadLine: '#ece7db',
+  sidewalk: '#d9cba9',
+  building: ['#9db4c6', '#b09a86', '#8ba08c', '#c0a488', '#7e93a8', '#a08c9b', '#97a08b'],
+  tint: ['#a9bcd0', '#8fa39c', '#9aa7b5', '#b3a08c'],
 };
 
-export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
-
-/** Where the best score is kept between visits (this browser only). */
-export const BEST_KEY = 'block-dodger.best';
+export const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+export const BEST_KEY = 'goldshore.save.v1';

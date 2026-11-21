@@ -1,53 +1,89 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Keyboard and mouse input for an open world: held keys drive movement, steering and firing,
+// one-shot presses (confirm, pause, enter/exit a car, mute) are queued as bit flags and taken
+// once by the loop, and the pointer position feeds the renderer's world-space aim.
 
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
+export const ACTION_ENTER = 4;
+export const ACTION_MUTE = 8;
+export const ACTION_FIRE = 16;
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+const MOVE_NEG_X = ['KeyA', 'ArrowLeft'];
+const MOVE_POS_X = ['KeyD', 'ArrowRight'];
+const MOVE_NEG_Y = ['KeyW', 'ArrowUp'];
+const MOVE_POS_Y = ['KeyS', 'ArrowDown'];
 
 export function createInput(target) {
-  let left = false;
-  let right = false;
+  const keys = new Set();
   let actions = 0;
+  let mouseX = -1000;
+  let mouseY = -1000;
+  let mouseDown = false;
 
   window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
+    if (event.code === 'Space' || event.code.startsWith('Arrow')) event.preventDefault();
+    if (!event.repeat) {
+      if (event.code === 'Space' || event.code === 'Enter') actions |= ACTION_CONFIRM;
+      else if (event.code === 'KeyP' || event.code === 'Escape') actions |= ACTION_PAUSE;
+      else if (event.code === 'KeyE') actions |= ACTION_ENTER;
+      else if (event.code === 'KeyM') actions |= ACTION_MUTE;
+    }
+    keys.add(event.code);
   });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
-  });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
+  window.addEventListener('keyup', (event) => keys.delete(event.code));
   window.addEventListener('blur', () => {
-    left = false;
-    right = false;
+    keys.clear();
+    mouseDown = false;
   });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
+  target.addEventListener('pointermove', (event) => {
+    mouseX = event.clientX;
+    mouseY = event.clientY;
   });
+  target.addEventListener('pointerdown', (event) => {
+    mouseX = event.clientX;
+    mouseY = event.clientY;
+    if (event.button === 0) {
+      mouseDown = true;
+      actions |= ACTION_CONFIRM;
+      // Even a click shorter than one frame must fire once.
+      actions |= ACTION_FIRE;
+    }
+  });
+  window.addEventListener('pointerup', (event) => {
+    if (event.button === 0) mouseDown = false;
+  });
+  target.addEventListener('contextmenu', (event) => event.preventDefault());
 
   return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
+    pressed(code) {
+      return keys.has(code);
     },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
+    /** -1, 0 or 1 from the held keys in the two lists. */
+    axis(negative, positive) {
+      let value = 0;
+      for (const code of negative) if (keys.has(code)) value -= 1;
+      for (const code of positive) if (keys.has(code)) value += 1;
+      return Math.sign(value);
+    },
+    moveX() {
+      return this.axis(MOVE_NEG_X, MOVE_POS_X);
+    },
+    moveY() {
+      return this.axis(MOVE_NEG_Y, MOVE_POS_Y);
+    },
     takeActions() {
       const taken = actions;
       actions = 0;
       return taken;
+    },
+    get mouseX() {
+      return mouseX;
+    },
+    get mouseY() {
+      return mouseY;
+    },
+    get mouseDown() {
+      return mouseDown;
     },
   };
 }

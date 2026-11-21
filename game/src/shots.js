@@ -1,79 +1,103 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// Deterministic screenshot scenes behind ?shot=cover|drive|wanted|mission. Each scene starts from
+// the same seeded city, sets up a real situation with the game's own rules, plays a few fixed steps
+// (with a simple autopilot for the steering and firing) and returns the screen to draw. The frame
+// is therefore a real game frame, and the same seed always produces the same frame.
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
+import { STEP } from './config.js';
+import { addWanted } from './police.js';
+import { startMission } from './missions.js';
+import { stepState } from './state.js';
+import { SCREEN_PLAY, SCREEN_TITLE } from './render.js';
 
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
-    }
-  }
-  return Infinity;
+const idle = {
+  moveX: 0, moveY: 0, throttle: 0, steer: 0, fire: false,
+  enter: false, aimX: null, aimY: null,
+};
+
+function advance(state, steps, controls) {
+  for (let i = 0; i < steps; i += 1) stepState(state, { ...idle, ...controls }, STEP);
 }
 
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
-  }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
+function placeCar(car, x, y, angle, speed) {
+  car.x = x;
+  car.y = y;
+  car.angle = angle;
+  car.speed = speed;
+  car.state = 'park';
 }
 
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
-export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
+function drive(state, car) {
+  state.player.inCar = car;
+  state.player.x = car.x;
+  state.player.y = car.y;
+  state.player.angle = car.angle;
+}
+
+/** Stage one named scene and return which screen to paint over it. */
+export function stageShot(name, state) {
+  if (name === 'drive') {
+    const car = state.cars[1];
+    placeCar(car, 610, 300, 0.08, 195);
+    drive(state, car);
+    startMission(state, 0);
+    advance(state, 28, { throttle: 1, steer: 0.01 });
+    state.message = 'Harbor Run · get the package to the Old Market drop.';
+    state.messageTimer = 20;
+    return { screen: SCREEN_PLAY };
   }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
+
+  if (name === 'wanted') {
+    const car = state.cars[2];
+    placeCar(car, 690, 300, 0.1, 210);
+    drive(state, car);
+    startMission(state, 0);
+    addWanted(state, 4);
+    const spots = [
+      { x: 840, y: 345, angle: Math.PI + 0.3 },
+      { x: 520, y: 250, angle: 0.5 },
+      { x: 300, y: 440, angle: 0.1 },
+    ];
+    state.cops.forEach((cop, i) => {
+      const spot = spots[i % spots.length];
+      placeCar(cop, spot.x, spot.y, spot.angle, 100);
+      cop.dead = false;
+    });
+    state.copPeds.forEach((ped, i) => {
+      ped.x = 790 + i * 55;
+      ped.y = 250 - i * 40;
+      ped.dead = false;
+    });
+    advance(state, 12, { throttle: 1, steer: 0.02, fire: true, aimX: 900, aimY: 330 });
+    state.message = 'Goldshore PD in pursuit · five stars and closing in.';
+    state.messageTimer = 20;
+    return { screen: SCREEN_PLAY };
   }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+
+  if (name === 'mission') {
+    state.player.x = 130;
+    state.player.y = 300;
+    state.player.health = 82;
+    startMission(state, 1);
+    addWanted(state, 2);
+    state.cops.forEach((cop, i) => placeCar(cop, 360 + i * 180, 440, Math.PI, 80));
+    state.copPeds.forEach((ped, i) => {
+      ped.x = 205 + i * 52;
+      ped.y = 255 + (i % 2) * 70;
+      ped.dead = false;
+    });
+    advance(state, 18, { fire: true, aimX: 230, aimY: 280 });
+    state.message = 'Market Vigil · hold Stall 12 against the harbor crew.';
+    state.messageTimer = 20;
+    return { screen: SCREEN_PLAY };
+  }
+
+  // The cover: Mara Voss in the downtown streets, the city and the live map behind the title.
+  state.player.x = 520;
+  state.player.y = 330;
+  state.player.angle = -0.35;
+  startMission(state, 0);
+  advance(state, 36, { aimX: 760, aimY: 240 });
+  state.message = '';
+  state.messageTimer = 0;
+  return { screen: SCREEN_TITLE };
 }

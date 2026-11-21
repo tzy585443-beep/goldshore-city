@@ -1,3 +1,5 @@
+# Working copy of the gta6-01 rules: this is the building agent's copy of the competition rules.
+
 Make GTA 6
 
 The transcript checks have changed since these rules were written. Each entry is held to the checks in force when it is checked; where the Transcript gate section here differs from them, those checks apply. The checks as they stand today are in this file under "## The transcript gate", and at https://make.fun/api/competitions/gta6-01/requirements.
